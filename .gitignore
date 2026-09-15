@@ -1,0 +1,23 @@
+# Ignore raw and processed data directories
+01_data_raw/
+02_genome/
+03_qc_raw/
+04_trimmed/
+05_qc_trimmed/
+06_star_index/
+07_star_aligned/
+08_featurecounts/
+09_multiqc/
+
+# Ignore large sequencing & alignment files anywhere
+*.fastq
+*.fastq.gz
+*.fq.gz
+*.bam
+*.sam
+
+# R & System temporary files
+.Rhistory
+.RData
+.Rproj.user/
+.DS_Store

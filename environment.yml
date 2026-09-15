@@ -1,0 +1,34 @@
+name: long_rna_env
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  # 1. QC
+  - fastqc
+  - multiqc
+  # 2. Trimming
+  - fastp
+  # 3. Mapping
+  - star
+  - samtools
+  # 4. Counting
+  - subread
+  
+  # --- NEW PACKAGES FOR GSEA ---
+  - r-base
+  - r-essentials
+  - bioconductor-deseq2
+  - bioconductor-apeglm
+  - r-ggplot2
+  - r-pheatmap
+  - r-rcolorbrewer
+  - r-ggrepel
+  - r-dplyr
+  - r-viridis
+  - r-tidyr
+  - r-broom
+  - bioconductor-clusterprofiler
+  - r-msigdbr
+  - bioconductor-org.mm.eg.db
+  - bioconductor-enrichplot
