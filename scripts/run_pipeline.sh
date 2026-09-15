@@ -1,39 +1,37 @@
 #!/bin/bash
-set -e # El script fallará si un comando falla
+set -e # Exit immediately if a command exits with a non-zero status
 
 # --- 0. USER CONFIGURATION (ADJUST THESE!) ---
 
-# Configura el número de hilos (cores)
+# Set the number of threads (cores)
 THREADS=64
 
-# --- Rutas a tus archivos de genoma y anotación ---
-# (¡Estos ya están configurados con los nombres que proporcionaste!)
+# --- Paths to genome and annotation files ---
 GENOME_FASTA="02_genome/GRCm38.p4.genome.fa"
 GENOME_GTF="02_genome/gencode.vM10.annotation.gtf"
 
-# --- Library Strandness (CRÍTICO para featureCounts) ---
-# 0 = Sin hebra (Unstranded)
-# 1 = Con hebra (Stranded)
-# 2 = Con hebra reversa (Reversely Stranded) (Más común para Illumina)
-# ¡Déjalo en 2! Si obtienes 0 conteos, cambia esto a 1 o 0.
+# --- Library Strandness (CRITICAL for featureCounts) ---
+# 0 = Unstranded
+# 1 = Stranded
+# 2 = Reversely Stranded (Most common for Illumina)
 STRANDNESS=2
 
 # --- END OF CONFIGURATION ---
 
-echo "--- INICIANDO PIPELINE DE RNA-SEQ ---"
-echo "Usando $THREADS hilos."
+echo "--- STARTING RNA-SEQ PIPELINE ---"
+echo "Using $THREADS threads."
 
-# --- 1. QC INICIAL (FASTQC) ---
-echo "PASO 1: Ejecutando FastQC en datos crudos..."
+# --- 1. INITIAL QC (FASTQC) ---
+echo "STEP 1: Running FastQC on raw data..."
 fastqc -t $THREADS -o 03_qc_raw 01_data_raw/*.fastq.gz
 
 # --- 2. TRIMMING (FASTP) ---
-echo "PASO 2: Ejecutando fastp para trimming..."
+echo "STEP 2: Running fastp for adapter trimming..."
 for R1 in 01_data_raw/*_R1_*.fastq.gz; do
     R2=$(echo $R1 | sed 's/_R1_/_R2_/')
     SAMPLE=$(basename $R1 | sed 's/_R1_.*//')
     
-    echo "Procesando muestra: $SAMPLE"
+    echo "Processing sample: $SAMPLE"
     
     fastp \
         -i $R1 \
@@ -46,28 +44,25 @@ for R1 in 01_data_raw/*_R1_*.fastq.gz; do
         --detect_adapter_for_pe
 done
 
-# --- 3. QC POST-TRIMMING (FASTQC) ---
-echo "PASO 3: Ejecutando FastQC en datos trimmeados..."
+# --- 3. POST-TRIMMING QC (FASTQC) ---
+echo "STEP 3: Running FastQC on trimmed data..."
 fastqc -t $THREADS -o 05_qc_trimmed 04_trimmed/*.trimmed.fastq.gz
 
-# --- 4. ÍNDICE DEL GENOMA (STAR) ---
-echo "PASO 4: Creando índice del genoma STAR (si no existe)..."
+# --- 4. GENOME INDEXING (STAR) ---
+echo "STEP 4: Generating STAR genome index (if it does not exist)..."
 if [ ! -f "06_star_index/SA" ]; then
     STAR --runMode genomeGenerate \
          --runThreadN $THREADS \
          --genomeDir 06_star_index \
          --genomeFastaFiles $GENOME_FASTA \
          --sjdbGTFfile $GENOME_GTF \
-         --sjdbOverhang 100 # Ideal: ReadLength-1. 100 es un valor seguro.
+         --sjdbOverhang 100
 else
-    echo "Índice de STAR ya existe. Saltando."
+    echo "STAR index already exists. Skipping."
 fi
 
-# --- 5. ALINEAMIENTO (STAR) ---
+# --- 5. ALIGNMENT (STAR) ---
 echo "STEP 5: Aligning reads with STAR..."
-
-# --- AÑADE ESTA LÍNEA ---
-# Crea un directorio temporal base para la clasificación de STAR
 mkdir -p 07_star_aligned/STAR_temp
 
 for R1 in 04_trimmed/*_R1.trimmed.fastq.gz; do
@@ -84,20 +79,23 @@ for R1 in 04_trimmed/*_R1.trimmed.fastq.gz; do
          --outFileNamePrefix 07_star_aligned/${SAMPLE}_ \
          --outSAMtype BAM SortedByCoordinate \
          --outSAMattributes Standard \
-         --outTmpDir 07_star_aligned/STAR_temp/${SAMPLE}_ # <-- AÑADE ESTA LÍNEA (incluye la '\' en la línea anterior)
+         --outTmpDir 07_star_aligned/STAR_temp/${SAMPLE}_
 done
-# --- 6. CONTEO (featureCounts) ---
-echo "PASO 6: Generando tabla de conteos con featureCounts..."
+
+# --- 6. QUANTIFICATION (featureCounts) ---
+echo "STEP 6: Generating count matrix with featureCounts..."
 featureCounts \
     -T $THREADS \
-    -p # -p especifica lecturas paired-end
+    -p \
     -s $STRANDNESS \
     -a $GENOME_GTF \
     -o 08_featurecounts/counts.txt \
-# --- 7. QC AGREGADO (MultiQC) ---
-echo "PASO 7: Generando reporte final MultiQC..."
+    07_star_aligned/*.bam
+
+# --- 7. AGGREGATED QC (MultiQC) ---
+echo "STEP 7: Generating final MultiQC report..."
 multiqc . -o 09_multiqc -f
 
-echo "--- ¡PIPELINE COMPLETADO! ---"
-echo "Tabla de conteos final en: 08_featurecounts/counts.txt"
-echo "Reporte de QC final en: 09_multiqc/multiqc_report.html"
+echo "--- PIPELINE COMPLETED! ---"
+echo "Final count matrix: 08_featurecounts/counts.txt"
+echo "Final QC report: 09_multiqc/multiqc_report.html"
